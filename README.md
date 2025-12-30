@@ -1,1 +1,2 @@
-./This is my C language game development log;
+C语言学习和开发游戏的日志
+2025年12月30日学习了内存的动态管理

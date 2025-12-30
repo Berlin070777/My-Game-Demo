@@ -4,14 +4,13 @@
 #include <string.h> 
 #include <unistd.h> 
 
-// --- [数值配置] ---
 #define MONSTER_BASE_HP 80
 #define MONSTER_BASE_ATK 15
 #define PLAYER_BASE_ATK 5
-#define SWORD_ATK_BONUS 30     // 剑的攻击力加成
-#define ARMOR_DEF_BONUS 5      // 护甲减伤数值
-#define JACKPOT_PRIZE 1000     // 盲盒大奖金额
-#define SHIELD_BLOCK_CHANCE 25 // [新增] 盾牌格挡概率 25%
+#define SWORD_ATK_BONUS 30     
+#define ARMOR_DEF_BONUS 5      
+#define JACKPOT_PRIZE 1000     
+#define SHIELD_BLOCK_CHANCE 25 
 
 struct Item {
     int id;
@@ -37,7 +36,7 @@ int CalTotalPrice (int x , int y) {
     return x * y;
 }
 
-// --- 独立的存档函数 ---
+// --- 存档函数 ---
 void SaveGame(struct Player *p) {
     FILE* fp = fopen("game_save.txt", "w");
     if (fp == NULL) {
@@ -54,7 +53,7 @@ void SaveGame(struct Player *p) {
     sleep(1);
 }
 
-// --- 独立的读档函数 ---
+// --- 读档函数 ---
 void LoadGame(struct Player *p) {
     FILE* fp = fopen("game_save.txt", "r");
     if (fp == NULL) {
@@ -71,7 +70,7 @@ void LoadGame(struct Player *p) {
     sleep(1);
 }
 
-// --- [核心修改] 战斗函数 ---
+// --- 战斗函数 ---
 void Battle(struct Player *p) {
     char input[50]; 
 
@@ -100,9 +99,8 @@ void Battle(struct Player *p) {
 
     int monster_hp = MONSTER_BASE_HP;
     
-    // 计算玩家伤害
     int player_damage = PLAYER_BASE_ATK; 
-    if (p->bag[2] > 0) { // 有剑
+    if (p->bag[2] > 0) { 
         player_damage = SWORD_ATK_BONUS; 
         printf("(You pull out your Sword! ATK: %d)\n", player_damage);
     } else {
@@ -117,7 +115,7 @@ void Battle(struct Player *p) {
         printf("[Turn] You attack the monster...\n");
         usleep(500000); 
         
-        // 暴击逻辑 (20%概率)
+        // 暴击逻辑
         int actual_dmg = player_damage;
         if (rand() % 100 < 20) {
             actual_dmg *= 2;
@@ -134,7 +132,7 @@ void Battle(struct Player *p) {
             printf("\n🏆 VICTORY! You defeated the monster!\n");
             
             // 掉落逻辑
-            int loot_gold = 30 + (rand() % 31); // 掉落 30~60 金币
+            int loot_gold = 30 + (rand() % 31); 
             if (rand() % 100 < 5) { // 稀有掉落
                 printf("✨ RARE DROP! You found a Gem! (+500G)\n");
                 p->gold += 500;
@@ -151,12 +149,12 @@ void Battle(struct Player *p) {
         printf("[Turn] The monster attacks you!\n");
         usleep(500000); 
 
-        // 怪物攻击力浮动 (基础攻击力 ± 5)
+        // 怪物攻击力浮动
         int monster_atk = MONSTER_BASE_ATK + (rand() % 11 - 5); 
         int hurt = monster_atk;
-        int is_blocked = 0; // [新增] 标记是否格挡成功
+        int is_blocked = 0; // 标记是否格挡成功
 
-        // --- [新增] 盾牌格挡逻辑 ---
+        // --- 盾牌格挡逻辑 ---
         if (p->bag[3] > 0) { // 如果有盾牌
             if (rand() % 100 < SHIELD_BLOCK_CHANCE) {
                 is_blocked = 1; // 成功格挡
@@ -165,11 +163,11 @@ void Battle(struct Player *p) {
             }
         }
 
-        // --- 护甲减伤逻辑 (只有没防住才计算护甲) ---
+        // --- 护甲减伤逻辑 ---
         if (is_blocked == 0) { 
             if (p->bag[4] > 0) { // 有护甲
                 hurt -= ARMOR_DEF_BONUS; 
-                if (hurt < 1) hurt = 1; // 至少扣1点血
+                if (hurt < 1) hurt = 1; 
                 printf("🛡️  CLANG! (Armor blocked %d dmg) ", ARMOR_DEF_BONUS);
             }
         }
@@ -219,7 +217,6 @@ void ShowMenu() {
     printf("0: Apple       ($10)  [Heal 15 HP]\n");
     printf("1: Bread       ($30)  [Heal 40 HP]\n");
     printf("2: Iron Sword  ($150) [Atk = 30]\n");
-    // [修改] 更新盾牌描述
     printf("3: Wood Shield ($200) [25%% Block Chance]\n"); 
     printf("4: Iron Armor  ($300) [Def +5]\n");
     printf("5: Mystery Box ($100) [Win $1000?]\n");
