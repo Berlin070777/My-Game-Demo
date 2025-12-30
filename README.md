@@ -1,1 +1,0 @@
-./This is my C language game development log;
