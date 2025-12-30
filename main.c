@@ -4,7 +4,6 @@
 #include <string.h> 
 #include <unistd.h> 
 
-// --- [数值配置] ---
 #define MONSTER_BASE_HP 80
 #define MONSTER_BASE_ATK 15
 #define PLAYER_BASE_ATK 5
@@ -22,7 +21,8 @@ struct Item {
 struct Player{
     int gold;
     int hp;
-    int bag[6];
+    int *bag;
+    int bagSize;
     int maxhp;
 };
 
@@ -37,7 +37,6 @@ int CalTotalPrice (int x , int y) {
     return x * y;
 }
 
-// --- 独立的存档函数 ---
 void SaveGame(struct Player *p) {
     FILE* fp = fopen("game_save.txt", "w");
     if (fp == NULL) {
@@ -45,8 +44,8 @@ void SaveGame(struct Player *p) {
         sleep(1);
         return; 
     }
-    fprintf(fp, "%d %d %d\n", p->gold, p->hp, p->maxhp); 
-    for (int i = 0; i < 6; i++) {
+    fprintf(fp, "%d %d %d %d\n", p->gold, p->hp, p->maxhp, p->bagSize); 
+    for (int i = 0; i < p->bagSize; i++) {
         fprintf(fp, "%d ", p->bag[i]);
     }
     fclose(fp);
@@ -54,7 +53,6 @@ void SaveGame(struct Player *p) {
     sleep(1);
 }
 
-// --- 独立的读档函数 ---
 void LoadGame(struct Player *p) {
     FILE* fp = fopen("game_save.txt", "r");
     if (fp == NULL) {
@@ -62,8 +60,21 @@ void LoadGame(struct Player *p) {
         sleep(1);
         return;
     }
-    fscanf(fp, "%d %d %d", &p->gold, &p->hp, &p->maxhp);
-    for (int i = 0; i < 6; i++) {
+    
+    if (p->bag != NULL) {
+        free(p->bag);
+    }
+
+    fscanf(fp, "%d %d %d %d", &p->gold, &p->hp, &p->maxhp, &p->bagSize);
+    
+    p->bag = (int*)malloc(p->bagSize * sizeof(int));
+    if (p->bag == NULL) {
+        printf("Memory Error during loading!\n");
+        fclose(fp);
+        return;
+    }
+
+    for (int i = 0; i < p->bagSize; i++) {
         fscanf(fp, "%d", &p->bag[i]);
     }
     fclose(fp);
@@ -71,14 +82,12 @@ void LoadGame(struct Player *p) {
     sleep(1);
 }
 
-// --- 战斗函数 ---
 void Battle(struct Player *p) {
     char input[50]; 
 
     printf("\n>>> You venture into the wilds... <<<\n");
     sleep(1); 
 
-    // 遇敌概率 50%
     int encounter = rand() % 2; 
     if (encounter == 0) {
         printf("...\n");
@@ -100,9 +109,8 @@ void Battle(struct Player *p) {
 
     int monster_hp = MONSTER_BASE_HP;
     
-    // 玩家伤害
     int player_damage = PLAYER_BASE_ATK; 
-    if (p->bag[2] > 0) { 
+    if (p->bagSize > 2 && p->bag[2] > 0) { 
         player_damage = SWORD_ATK_BONUS; 
         printf("(You pull out your Sword! ATK: %d)\n", player_damage);
     } else {
@@ -110,14 +118,11 @@ void Battle(struct Player *p) {
     }
     usleep(800000); 
 
-    // 战斗循环
     while (p->hp > 0 && monster_hp > 0) {
         printf("\n----------------------\n");
-        // 1. 玩家回合
         printf("[Turn] You attack the monster...\n");
         usleep(500000); 
         
-        // 暴击逻辑
         int actual_dmg = player_damage;
         if (rand() % 100 < 20) {
             actual_dmg *= 2;
@@ -128,14 +133,12 @@ void Battle(struct Player *p) {
         monster_hp -= actual_dmg;
         printf("Monster HP: %d\n", monster_hp > 0 ? monster_hp : 0);
         
-        // 胜利判定
         if (monster_hp <= 0) {
             usleep(500000);
             printf("\n🏆 VICTORY! You defeated the monster!\n");
             
-            // 掉落逻辑
-            int loot_gold = 30 + (rand() % 31); // 掉落 30~60 金币
-            if (rand() % 100 < 5) { // 稀有掉落
+            int loot_gold = 30 + (rand() % 31); 
+            if (rand() % 100 < 5) { 
                 printf("✨ RARE DROP! You found a Gem! (+500G)\n");
                 p->gold += 500;
             } else {
@@ -147,34 +150,29 @@ void Battle(struct Player *p) {
 
         sleep(1); 
 
-        // 2. 怪物回合
         printf("[Turn] The monster attacks you!\n");
         usleep(500000); 
 
-        // 怪物攻击力浮动 (基础攻击力 ± 5)
         int monster_atk = MONSTER_BASE_ATK + (rand() % 11 - 5); 
         int hurt = monster_atk;
-        int is_blocked = 0; // 标记是否格挡成功
+        int is_blocked = 0; 
 
-        // --- 盾牌格挡逻辑 ---
-        if (p->bag[3] > 0) { // 如果有盾牌
+        if (p->bagSize > 3 && p->bag[3] > 0) { 
             if (rand() % 100 < SHIELD_BLOCK_CHANCE) {
-                is_blocked = 1; // 成功格挡
-                hurt = 0;       // 伤害归零
+                is_blocked = 1; 
+                hurt = 0;       
                 printf("🛡️  BLOCKED! (Your shield negated the damage!)\n");
             }
         }
 
-        // --- 护甲减伤逻辑  ---
         if (is_blocked == 0) { 
-            if (p->bag[4] > 0) { // 有护甲
+            if (p->bagSize > 4 && p->bag[4] > 0) { 
                 hurt -= ARMOR_DEF_BONUS; 
-                if (hurt < 1) hurt = 1; // 至少扣1点血
+                if (hurt < 1) hurt = 1; 
                 printf("🛡️  CLANG! (Armor blocked %d dmg) ", ARMOR_DEF_BONUS);
             }
         }
         
-        // 结算扣血
         p->hp -= hurt;
         if(p->hp < 0) p->hp = 0;
         
@@ -188,7 +186,6 @@ void Battle(struct Player *p) {
         sleep(1); 
     }
 
-    // 死亡处理
     if (p->hp <= 0) {
         printf("\n☠️ YOU DIED... GAME OVER ☠️\n");
         while(1) {
@@ -203,6 +200,7 @@ void Battle(struct Player *p) {
                 break; 
             } else if (strcmp(input, "exit") == 0) {
                 printf("Goodbye!\n");
+                if (p->bag != NULL) free(p->bag);
                 exit(0); 
             } else {
                 printf("Invalid command.\n");
@@ -219,10 +217,10 @@ void ShowMenu() {
     printf("0: Apple       ($10)  [Heal 15 HP]\n");
     printf("1: Bread       ($30)  [Heal 40 HP]\n");
     printf("2: Iron Sword  ($150) [Atk = 30]\n");
-    // 更新盾牌描述
     printf("3: Wood Shield ($200) [25%% Block Chance]\n"); 
     printf("4: Iron Armor  ($300) [Def +5]\n");
     printf("5: Mystery Box ($100) [Win $1000?]\n");
+    printf("6: Bag Upgrade ($500) [+2 Slots]\n");
     printf("-----------------\n");
     printf("(Cmd: 'id', 'bag', 'eat', 'hunt', 'open', 'save', 'load', 'exit')\n");
 }
@@ -231,20 +229,30 @@ int main() {
     setbuf(stdout, NULL);
     srand(time(NULL));
 
-    struct Player hero = {
-        100,    // gold
-        150,    // hp
-        {0},    // bag
-        150     // maxhp
-    };
+    struct Player hero;
+    hero.gold = 100;
+    hero.hp = 150;
+    hero.maxhp = 150;
+    hero.bagSize = 6;
+    hero.bag = (int*)malloc(hero.bagSize * sizeof(int));
 
-    struct Item items[6] = {
+    if (hero.bag == NULL) {
+        printf("Fatal Error: Memory allocation failed.\n");
+        return 1;
+    }
+    
+    for (int i = 0; i < hero.bagSize; i++) {
+        hero.bag[i] = 0;
+    }
+
+    struct Item items[7] = {
         {0,"Apple", 10},
         {1,"Bread", 30},
         {2,"Sword", 150},
         {3,"Shield", 200},
         {4,"Armor", 300},
-        {5,"Mystery Box", 100}
+        {5,"Mystery Box", 100},
+        {6,"Bag Upgrade", 500}
     };
    
     int id = 0;
@@ -264,25 +272,24 @@ int main() {
         printf("Command > ");
         scanf("%s", input); 
 
-        // --- Save ---
         if (strcmp(input, "save") == 0) {
             SaveGame(&hero); 
             continue;
         }
 
-        // --- Load ---
         if (strcmp(input, "load") == 0) {
             LoadGame(&hero);
             continue;
         }
 
-        // --- Bag ---
         if (strcmp(input, "bag") == 0) {
-            printf("\n--- Your Bag ---\n");
+            printf("\n--- Your Bag (Size: %d) ---\n", hero.bagSize);
             int empty = 1;
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < hero.bagSize; i++) {
                 if (hero.bag[i] > 0) {
-                    printf("[%d] %s: %d\n", i, items[i].name, hero.bag[i]);
+                    // 只显示已知的物品名称
+                    char* itemName = (i < 7) ? items[i].name : "Unknown Item";
+                    printf("[%d] %s: %d\n", i, itemName, hero.bag[i]);
                     empty = 0;
                 } 
             }
@@ -294,11 +301,10 @@ int main() {
             continue; 
         }
 
-        // --- Eat ---
         if (strcmp(input, "eat") == 0) {
             printf("\n--- 🍽️  Food Menu 🍽️  ---\n");
-            printf("0: Apple (Heal 15 HP) [Own: %d]\n", hero.bag[0]);
-            printf("1: Bread (Heal 40 HP) [Own: %d]\n", hero.bag[1]);
+            if (hero.bagSize > 0) printf("0: Apple (Heal 15 HP) [Own: %d]\n", hero.bag[0]);
+            if (hero.bagSize > 1) printf("1: Bread (Heal 40 HP) [Own: %d]\n", hero.bag[1]);
             printf("-------------------------\n");
 
             int food_id = -1;
@@ -310,7 +316,7 @@ int main() {
                 sleep(1); continue;
             }
 
-            if (hero.bag[food_id] <= 0) {
+            if (food_id >= hero.bagSize || hero.bag[food_id] <= 0) {
                 printf("You don't have any!\n");
                 sleep(1); continue;
             }
@@ -333,15 +339,13 @@ int main() {
             continue; 
         }
 
-        // --- Hunt ---
         if (strcmp(input, "hunt") == 0) {
             Battle(&hero); 
             continue; 
         }
 
-        // --- Open ---
         if (strcmp(input, "open") == 0) {
-            if (hero.bag[5] <= 0) {
+            if (hero.bagSize <= 5 || hero.bag[5] <= 0) {
                 printf("No Mystery Boxes!\n");
                 sleep(1); continue;
             }
@@ -363,13 +367,11 @@ int main() {
             continue; 
         }
 
-        // --- Exit ---
         if (strcmp(input, "exit") == 0) {
             printf("Goodbye!\n" );
             break;
         }
 
-        // --- Buy Logic ---
         id = atoi(input);
         
         if (id == 0 && input[0] != '0') {
@@ -378,7 +380,7 @@ int main() {
              continue;
         }
 
-        if (id < 0 || id > 5) {
+        if (id < 0 || id > 6) {
             printf("Error: Invalid ID!\n");
             sleep(1); 
             continue; 
@@ -397,13 +399,41 @@ int main() {
 
         if (total <= hero.gold) {
             hero.gold -= total;
-            hero.bag[id] += count;
-            printf("Success! Bought %d %s(s).\n", count, items[id].name);
+
+            if (id == 6) {
+                printf("Upgrading backpack...\n");
+                sleep(1);
+                
+                int newSize = hero.bagSize + (2 * count);
+                int* temp = (int*)realloc(hero.bag, newSize * sizeof(int));
+                
+                if (temp != NULL) {
+                    hero.bag = temp; 
+                    for (int i = hero.bagSize; i < newSize; i++) {
+                        hero.bag[i] = 0;
+                    }
+                    hero.bagSize = newSize; 
+                    printf("Success! Bag size increased to %d slots!\n", newSize);
+                } else {
+                    printf("Error: Memory allocation failed!\n");
+                    hero.gold += total; 
+                }
+            } else {
+                if (id >= hero.bagSize) {
+                    printf("Your bag is too small for this item! Upgrade it first.\n");
+                    hero.gold += total; 
+                } else {
+                    hero.bag[id] += count;
+                    printf("Success! Bought %d %s(s).\n", count, items[id].name);
+                }
+            }
             sleep(1);
         } else {
             printf("Not enough gold! You need $%d.\n", total);
             sleep(1);
         }
     } 
+    
+    free(hero.bag);
     return 0;
 }
